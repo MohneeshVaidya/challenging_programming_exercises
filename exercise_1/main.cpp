@@ -1,233 +1,255 @@
 #include <iostream>
-#include <limits>
-#include <unordered_set>
+#include <cstring>
 #include <fstream>
+#include <chrono>
 
-#define INITIAL_CAPACITY 8
+#define VECTOR_SIZE 10'000'000
+#define GROW_CAPACITY(capacity) ((capacity < 8) ? 8 : (capacity * 2))
+
+using i64 = int64_t;
 
 class Vector
 {
 public:
-    Vector(): Vector{ INITIAL_CAPACITY }
-    { }
-
-    Vector(int capacity): _capacity{ capacity }, _size{ 0 }, _data{ new int32_t[_capacity] }
-    { }
-
-    ~Vector()
+    Vector(): Vector{ 0 }
     {
-        _capacity = 0;
-        _size = 0;
-        delete _data;
     }
 
-    void insert(int value)
+    Vector(i64 capacity): capacity_{ capacity }, size_{ 0 }, data_{ new int[capacity_] } 
     {
-        if (_size >= _capacity)
+    }
+
+    // Accessors
+    i64 capacity() const
+    {
+        return capacity_;
+    }
+
+    i64 size() const
+    {
+        return size_;
+    }
+
+    int at(i64 index) const
+    {
+        check_out_of_bounds_error(index);
+        return *(data_ + index);
+    }
+
+    // Mutators
+    void push_back(int value)
+    {
+        if (size_ >= capacity_)
         {
-            std::cerr << "vector overflow\n";
-            std::exit(1);
+            grow_capacity();
         }
-        *(_data + _size) = value;
-        ++_size;
+        *(data_ + size_) = value;
+        size_++;
     }
 
-    int at(int index) const
+    void set(i64 index, int value)
     {
-        if (index < 0)
-        {
-            std::cerr << "index to vector can not be negative\n";
-            std::exit(1);
-        }
-        return *(_data + index);
-    }
-    
-    int set(int index, int value)
-    {
-        if (index < 0)
-        {
-            std::cerr << "index to vector can not be negative\n";
-            std::exit(1);
-        }
-        return (*(_data + index) = value);
-    }
-
-    int capacity() const
-    {
-        return _capacity;
-    }
-
-    int size() const
-    {
-        return _size;
+        check_out_of_bounds_error(index);
+        *(data_ + index) = value;
     }
 
 private:
-    int _capacity;
-    int _size;
-    int32_t *_data;
+    // Private helper methods
+    void check_out_of_bounds_error(i64 index) const
+    {
+        if (index < 0 || index >= size_)
+        {
+            std::cerr << "OutOfBoundsError: Index is out of limits.\n";
+            std::exit(1);
+        }
+    }
+
+    void grow_capacity()
+    {
+        int *tmp{ new int[size_] };
+
+        memcpy(tmp, data_, size_ * sizeof(int));
+        
+        delete data_;
+        
+        capacity_ = GROW_CAPACITY(capacity_);
+        data_ = new int[capacity_];
+
+        memcpy(data_, tmp, size_ * sizeof(int));
+
+        delete tmp;
+    }
+
+private:
+    i64 capacity_;
+    i64 size_;
+    int *data_;
 };
 
 std::ostream &operator << (std::ostream &out, const Vector &vector)
 {
     out << "[ ";
-    for (int i = 0; i < vector.size(); ++i)
+    
+    for (i64 i{ 0 }; i < vector.size(); ++i)
     {
         out << vector.at(i);
         if (i < vector.size() - 1)
         {
-            out << ",";
+            out << ", ";
         }
-        out << " ";
+        else
+        {
+            out << " ";
+        }
     }
+
     out << "]";
+
     return out;
 }
 
-void vector_insert_random_values(Vector &vector);
+void generate_random_values(Vector &vector);
 
-int get_duplicates_num(const Vector &vector);
+i64 num_duplicates(const Vector &vector, bool **arr);
 
-void round_duplicates(Vector &vector);
+void remove_duplicates(Vector &vector, bool *arr);
 
-void print_final_values_to_file(const Vector &vector);
+void save_to_file(const Vector &vector);
 
 int main()
 {
-    Vector vector{ 1'000'000 };
+    Vector vector{ };
+    generate_random_values(vector);
 
-    vector_insert_random_values(vector);
+    bool *arr{ nullptr };
 
-    std::cout << "number of duplicates: " << get_duplicates_num(vector) << "\n";
+    std::cout << "Number of duplicates = " << num_duplicates(vector, &arr) << "\n";
     
-    auto start_time = time(nullptr);
+    auto start{ std::chrono::high_resolution_clock::now() };
     
-    round_duplicates(vector);
+    remove_duplicates(vector, arr);
     
-    auto end_time = time(nullptr);
-    
-    std::cout << "time taken by duplicates handling routine = " << end_time - start_time << " seconds\n";
-    
-    std::cout << "number of duplicates: " << get_duplicates_num(vector) << "\n";
+    auto end{ std::chrono::high_resolution_clock::now() };
 
-    print_final_values_to_file(vector);
+    auto elapsed_time{ std::chrono::duration_cast<std::chrono::microseconds>(end - start) };
 
+    std::cout << "Time taken by duplicate handling procedure = " << elapsed_time.count() << " microseconds.\n";
+    
+    std::cout << "Number of duplicates = " << num_duplicates(vector, &arr) << "\n";
+
+    save_to_file(vector);
+    
+    delete[] arr;
     return 0;
 }
 
-void vector_insert_random_values(Vector &vector)
+void generate_random_values(Vector &vector)
 {
-    std::ofstream file { "./input.txt" };
+    std::ofstream file{ "./input.txt" };
 
     if (!file.is_open())
     {
-        std::cerr << "dataset.txt couldn't be opened\n";
+        std::cerr << "FileNotOpenedError: Somehow file couldn't be opened.\n";
         std::exit(1);
     }
 
-    for (int i = 0; i < vector.capacity(); ++i)
+    for (i64 i{ 0 }; i < VECTOR_SIZE; ++i)
     {
-        int value = static_cast<int>(1'000'000 * drand48());
-        vector.insert(value);
+        int value{ static_cast<int>(drand48() * VECTOR_SIZE) };
+        vector.push_back(value);
         file << value << " ";
     }
 
     file.close();
 }
 
-int get_duplicates_num(const Vector &vector)
+i64 num_duplicates(const Vector &vector, bool **arr)
 {
-    std::unordered_set<int> used;
-    int result = 0;
-
-    for (int i = 0; i < vector.size(); ++i)
+    delete[] *arr;
+    *arr = new bool[VECTOR_SIZE];
+    
+    for (i64 i{ 0 }; i < VECTOR_SIZE; ++i)
     {
-        if (used.count(vector.at(i)) == 0)
-        {
-            used.insert(vector.at(i));
-        }
-        else
+        (*arr)[i] = false;
+    }
+    
+    i64 result = 0;
+
+    for (i64 i{ 0 }; i < vector.size(); ++i)
+    {
+        if ((*arr)[vector.at(i)] == true)
         {
             ++result;
         }
+        (*arr)[vector.at(i)] = true;
     }
+
     return result;
 }
 
-void round_duplicates(Vector &vector)
+void remove_duplicates(Vector &vector, bool *arr)
 {
-    std::unordered_set<int> free;
-
-    for (int i = 0; i < 1'000'000; ++i)
+    bool *used{ new bool[VECTOR_SIZE] };
+    for (i64 i{ 0 }; i < VECTOR_SIZE; ++i)
     {
-        free.insert(i);
+        used[i] = false;
     }
 
-    int max = std::numeric_limits<int>::min();
-    
-    for (int i = 0; i < vector.size(); ++i)
+    for (i64 i { 0 }; i < vector.size(); ++i)
     {
-        if (free.count(vector.at(i)) == 1) free.erase(vector.at(i));
-        if (max < vector.at(i))
+        if (used[vector.at(i)] == false)
         {
-            max = vector.at(i);
-        }
-    }
-
-    std::unordered_set<int> used;
-    
-    for (int i = 0; i < vector.size(); ++i)
-    {
-        if (used.count(vector.at(i)) == 0)
-        {
-            used.insert(vector.at(i));
+            used[vector.at(i)] = true;
         }
         else
         {
-            bool found = false;
-            int left = vector.at(i)-1;
-            int right = vector.at(i)+1;
-            while (left >= 0 && right <= max)
+            int left{ vector.at(i)-1 };
+            int right{ vector.at(i)+1 };
+            
+            bool is_found{ false };
+            
+            while (left >= 0 && right < VECTOR_SIZE)
             {
-                if ((free.count(left) == 1 && free.count(right) == 1) || (free.count(left) == 1))
+                if ((arr[left] == false && arr[right] == false) || (arr[left] == false))
                 {
-                    found = true;
-                    free.erase(left);
+                    arr[left] = true;
                     vector.set(i, left);
+                    is_found = true;
+                    break;
                 }
-                else if (free.count(right) == 1)
+                else if (arr[right] == false)
                 {
-                    found = true;
-                    free.erase(right);
+                    arr[right] = true;
                     vector.set(i, right);
+                    is_found = true;
+                    break;
                 }
-                if (found) break;
                 --left;
                 ++right;
             }
-            if (!found)
+            if (!is_found)
             {
                 while (left >= 0)
                 {
-                    if (free.count(left) == 1)
+                    if (arr[left] == false)
                     {
-                        found = true;
-                        free.erase(left);
+                        arr[left] = true;
                         vector.set(i, left);
+                        is_found = true;
                         break;
                     }
                     --left;
                 }
             }
-            if (!found)
+            if (!is_found)
             {
-                while (right <= 999'999)
+                while (right < VECTOR_SIZE)
                 {
-                    if (free.count(right) == 1)
+                    if (arr[right] == false)
                     {
-                        found = true;
-                        free.erase(right);
+                        arr[right] = true;
                         vector.set(i, right);
+                        is_found = true;
                         break;
                     }
                     ++right;
@@ -235,19 +257,21 @@ void round_duplicates(Vector &vector)
             }
         }
     }
+
+    delete[] used;
 }
 
-void print_final_values_to_file(const Vector &vector)
+void save_to_file(const Vector &vector)
 {
-    std::ofstream file { "./result.txt" };
+    std::ofstream file{ "result.txt" };
 
     if (!file.is_open())
     {
-        std::cerr << "result.txt couldn't be opened\n";
+        std::cerr << "FileNotOpenedError: Somehow file couldn't be opened.\n";
         std::exit(1);
     }
 
-    for (int i = 0; i < vector.size(); ++i)
+    for (i64 i{ 0 }; i < vector.size(); ++i)
     {
         file << vector.at(i) << " ";
     }
